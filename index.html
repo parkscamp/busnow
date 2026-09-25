@@ -12,5 +12,57 @@
 </head>
 <body>
   <iframe src="https://script.google.com/macros/s/AKfycbzSRv9-yVn5AJHplsYD6qRun4yIsM97J4df3TMDsR6nOf4hiCKEWZEKBjsX-i0eQvYK0Q/exec" allow="geolocation" title="버스운행"></iframe>
+
+  <!--
+    역할: 버스 앱(구글 iframe 안)이 보내는 켜기/끄기 신호를 받아서, 이 최상위 페이지가 직접
+    화면꺼짐 방지(Wake Lock)를 잡는다. 최상위 페이지는 iframe 권한 제한을 받지 않는다.
+    버스 앱은 모바일 운전자가 리프레시 중일 때만 "켜기"를 보내므로 탑승자/PC는 영향 없음.
+  -->
+  <script>
+    (function () {
+      let wakeLock = null;
+      let wanted = false; // 버스 앱이 켜달라고 요청한 상태인지
+  
+      // 버스 앱 화면은 구글의 *-script.googleusercontent.com 에서 실행된다 - 그 외 출처의 메시지는 무시
+      const ALLOWED_ORIGIN = /^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/;
+  
+      async function acquire() {
+        if (wakeLock || !('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', function () { wakeLock = null; });
+        } catch (err) {
+          wakeLock = null;
+          console.warn('화면꺼짐 방지 요청 실패:', err.name, err.message);
+        }
+      }
+      function release() {
+        if (wakeLock) {
+          const lock = wakeLock;
+          wakeLock = null;
+          lock.release().catch(function () {});
+        }
+      }
+  
+      window.addEventListener('message', function (e) {
+        if (!ALLOWED_ORIGIN.test(e.origin)) return;
+        const d = e.data;
+        if (!d || d.type !== 'busapp-wakelock') return;
+        wanted = !!d.active;
+        if (wanted) acquire(); else release();
+      });
+  
+      // 백그라운드에 갔다 오면 브라우저가 Wake Lock을 자동으로 풀기 때문에 다시 잡는다
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && wanted) acquire();
+      });
+  
+      // 버스 앱 iframe이 새로고침되면 이전 상태를 초기화한다
+      // (새로 로그인한 운전자가 리프레시를 시작하면 다시 "켜기" 신호가 온다)
+      document.querySelectorAll('iframe').forEach(function (f) {
+        f.addEventListener('load', function () { wanted = false; release(); });
+      });
+    })();
+  </script>
 </body>
 </html>
