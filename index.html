@@ -59,8 +59,13 @@
   
       // 버스 앱 iframe이 새로고침되면 이전 상태를 초기화한다
       // (새로 로그인한 운전자가 리프레시를 시작하면 다시 "켜기" 신호가 온다)
+      // 첫 load는 최초 접속이므로 건너뜀 - 자동로그인으로 이미 받은 "켜기"를 지우지 않도록
       document.querySelectorAll('iframe').forEach(function (f) {
-        f.addEventListener('load', function () { wanted = false; release(); });
+        let firstLoad = true;
+        f.addEventListener('load', function () {
+          if (firstLoad) { firstLoad = false; return; }
+          wanted = false; release();
+        });
       });
     })();
   </script>
